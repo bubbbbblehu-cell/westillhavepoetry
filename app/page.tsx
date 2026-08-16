@@ -178,11 +178,20 @@ export default function Home() {
 
   useEffect(() => {
     let mounted = true;
-    void startSound().then((started) => {
-      if (mounted) setSoundOn(started);
-    });
+    const activateSound = () => {
+      void startSound().then((started) => {
+        if (mounted) setSoundOn(started);
+      });
+    };
+    // Browsers only permit audible Web Audio after an input event. Try on load
+    // for browsers that allow it, then unlock it from the first interaction anywhere.
+    window.addEventListener("pointerdown", activateSound, { capture: true, once: true });
+    window.addEventListener("keydown", activateSound, { once: true });
+    activateSound();
     return () => {
       mounted = false;
+      window.removeEventListener("pointerdown", activateSound, true);
+      window.removeEventListener("keydown", activateSound);
       stopSound();
     };
   }, []);
@@ -371,7 +380,7 @@ export default function Home() {
         className="particle-field"
         aria-label="a field of moving paper particles"
         onPointerMove={updatePointer}
-        onPointerDown={(event) => { updatePointer(event); event.currentTarget.setPointerCapture(event.pointerId); pointerRef.current.down = true; if (!soundEngineRef.current) void startSound().then(setSoundOn); }}
+        onPointerDown={(event) => { updatePointer(event); event.currentTarget.setPointerCapture(event.pointerId); pointerRef.current.down = true; }}
         onPointerUp={(event) => { updatePointer(event); pointerRef.current.down = false; }}
         onPointerCancel={() => { pointerRef.current.x = -1000; pointerRef.current.y = -1000; pointerRef.current.down = false; }}
         onPointerLeave={() => { pointerRef.current.x = -1000; pointerRef.current.y = -1000; pointerRef.current.down = false; }}
