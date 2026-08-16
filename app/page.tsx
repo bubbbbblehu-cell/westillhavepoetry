@@ -35,6 +35,7 @@ const poems: Poem[] = [
 ];
 
 const paperTints = ["#f1eee5", "#e6e1d5", "#f8f5ed", "#d9d4c8", "#eeebe2", "#e2ded4"];
+const publicAsset = (path: string) => `${import.meta.env.BASE_URL}${path}`;
 const backgroundLayouts: BackgroundPiece[][] = [
   [
     { text: "窗没有关紧", left: "46%", top: "13%", style: "large" },
@@ -318,11 +319,11 @@ export default function Home() {
     <main className={poem ? "particle-rain is-reading" : "particle-rain"}>
       <div className="book-page" aria-hidden="true">
         <div className="cathedral-ascii">
-          <img src="/cathedral-ascii.png" alt="" />
+          <img src={publicAsset("cathedral-ascii.png")} alt="" />
           <p>basílica de la sagrada família</p>
         </div>
       </div>
-      <img className="helicopter-ascii" src="/ascii-helicopter-rebuilt.gif" alt="" aria-hidden="true" />
+      <img className="helicopter-ascii" src={publicAsset("ascii-helicopter-rebuilt.gif")} alt="" aria-hidden="true" />
       <p className="particle-title">WE STILL HAVE POETRY</p>
       <p className="particle-hint">a helicopter scatters poems</p>
       <button className="sound-toggle" aria-pressed={soundOn} onClick={async () => {
