@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Poem = { title: string; author: string; text: string[]; directTranslation: string[] };
-type Particle = { x: number; y: number; vx: number; vy: number; size: number; turn: number; spin: number; tint: string; poem: number; readyAt: number; };
+type Particle = { x: number; y: number; vx: number; vy: number; size: number; turn: number; spin: number; tint: string; poem: number; readyAt: number; bornAt: number; lifetime: number; born: boolean; };
 type BackgroundPiece = { text: string; left: string; top: string; style?: "large" | "small" | "vertical" | "muted" | "wide" | "echo"; rotate?: number };
 type SoundEngine = { context: AudioContext; master: GainNode; drones: OscillatorNode[]; timer: number };
 
@@ -88,7 +88,7 @@ const backgroundLayouts: BackgroundPiece[][] = [
   ],
 ];
 
-function createParticle(width: number, height: number, index: number, startAnywhere = true, readyAt = 0): Particle {
+function createParticle(width: number, height: number, index: number, startAnywhere = true, readyAt = 0, born = true): Particle {
   const size = 3.4 + ((index * 23) % 58) / 10;
   return {
     x: ((index * 97) % Math.max(width, 1)) + Math.random() * 50,
@@ -101,6 +101,9 @@ function createParticle(width: number, height: number, index: number, startAnywh
     tint: paperTints[index % paperTints.length],
     poem: index % poems.length,
     readyAt,
+    bornAt: 0,
+    lifetime: 6200 + ((index * 41) % 3600),
+    born,
   };
 }
 
@@ -141,9 +144,18 @@ export default function Home() {
   };
 
   const startSound = async () => {
-    if (soundEngineRef.current) return;
+    if (soundEngineRef.current) return true;
     const context = new AudioContext();
-    await context.resume();
+    try {
+      await context.resume();
+      if (context.state !== "running") {
+        await context.close();
+        return false;
+      }
+    } catch {
+      await context.close();
+      return false;
+    }
     const master = context.createGain();
     master.gain.setValueAtTime(.42, context.currentTime);
     master.connect(context.destination);
@@ -161,9 +173,19 @@ export default function Home() {
     engine.timer = window.setInterval(() => playChime(engine, .018), 6400);
     soundEngineRef.current = engine;
     playChime(engine, .028);
+    return true;
   };
 
-  useEffect(() => () => stopSound(), []);
+  useEffect(() => {
+    let mounted = true;
+    void startSound().then((started) => {
+      if (mounted) setSoundOn(started);
+    });
+    return () => {
+      mounted = false;
+      stopSound();
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -187,7 +209,7 @@ export default function Home() {
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       flightStartedAt = performance.now();
       particlesRef.current = Array.from({ length: width < 700 ? 140 : 320 }, (_, index) => {
-        const particle = createParticle(width, height, index, false, flightStartedAt + index * 34);
+        const particle = createParticle(width, height, index, false, flightStartedAt + index * 24, false);
         particle.x = width * .9 - Math.random() * 90;
         particle.y = height * .14 + 20 + Math.random() * 40;
         particle.vx += -.24 + Math.random() * .12;
@@ -227,7 +249,7 @@ export default function Home() {
       const leg = movingLeft ? loop / .5 : (loop - .5) / .5;
       return {
         x: width * (movingLeft ? .9 - leg * .8 : .1 + leg * .8),
-        y: height * (.14 + Math.sin(time / 1500) * .014),
+        y: height * ((width < 700 ? .12 : .14) + Math.sin(time / 1500) * .014),
       };
     };
 
@@ -240,6 +262,15 @@ export default function Home() {
 
       for (const particle of particles) {
         if (time < particle.readyAt) continue;
+        if (!particle.born) {
+          const plane = planePosition(time);
+          particle.x = plane.x - 35 + Math.random() * 70;
+          particle.y = plane.y + 18 + Math.random() * 18;
+          particle.vx = -.25 + Math.random() * .38;
+          particle.vy = .18 + Math.random() * .5;
+          particle.bornAt = time;
+          particle.born = true;
+        }
         const wind = Math.sin(time / 1500 + particle.y / 90) * .014;
         let heldInView = false;
         if (pointer.x > -10) {
@@ -262,12 +293,13 @@ export default function Home() {
         particle.x += particle.vx * delta;
         particle.y += particle.vy * delta;
         particle.turn += particle.spin * delta;
-        if (particle.y > height + 26 || particle.x < -30 || particle.x > width + 30) {
+        if (particle.y > height + 26 || particle.x < -30 || particle.x > width + 30 || time - particle.bornAt > particle.lifetime) {
           const reset = createParticle(width, height, Math.floor(Math.random() * 1000), false);
           const plane = planePosition(time);
           reset.x = plane.x - 35 + Math.random() * 70;
-          reset.y = plane.y + 22 + Math.random() * 22;
+          reset.y = plane.y + 18 + Math.random() * 18;
           reset.vx += -0.2 + Math.random() * .4;
+          reset.bornAt = time;
           Object.assign(particle, reset);
         }
         drawParticle(particle, heldInView);
@@ -331,8 +363,7 @@ export default function Home() {
           stopSound();
           setSoundOn(false);
         } else {
-          await startSound();
-          setSoundOn(true);
+          setSoundOn(await startSound());
         }
       }}>{soundOn ? "sound on" : "sound off"}</button>
       <canvas
@@ -340,7 +371,7 @@ export default function Home() {
         className="particle-field"
         aria-label="a field of moving paper particles"
         onPointerMove={updatePointer}
-        onPointerDown={(event) => { updatePointer(event); event.currentTarget.setPointerCapture(event.pointerId); pointerRef.current.down = true; }}
+        onPointerDown={(event) => { updatePointer(event); event.currentTarget.setPointerCapture(event.pointerId); pointerRef.current.down = true; if (!soundEngineRef.current) void startSound().then(setSoundOn); }}
         onPointerUp={(event) => { updatePointer(event); pointerRef.current.down = false; }}
         onPointerCancel={() => { pointerRef.current.x = -1000; pointerRef.current.y = -1000; pointerRef.current.down = false; }}
         onPointerLeave={() => { pointerRef.current.x = -1000; pointerRef.current.y = -1000; pointerRef.current.down = false; }}
