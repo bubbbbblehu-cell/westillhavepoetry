@@ -204,17 +204,21 @@ export default function Home() {
     let animation = 0;
     let width = 0;
     let height = 0;
+    let pixelRatio = 0;
     let last = performance.now();
     let flightStartedAt = performance.now();
 
     const resize = () => {
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      width = window.innerWidth;
-      height = window.innerHeight;
+      const nextWidth = canvas.clientWidth;
+      const nextHeight = canvas.clientHeight;
+      if (!nextWidth || !nextHeight || (width === nextWidth && height === nextHeight && pixelRatio === ratio)) return;
+
+      width = nextWidth;
+      height = nextHeight;
+      pixelRatio = ratio;
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
-      canvas.style.width = width + "px";
-      canvas.style.height = height + "px";
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
       flightStartedAt = performance.now();
       particlesRef.current = Array.from({ length: width < 700 ? 140 : 320 }, (_, index) => {
@@ -317,10 +321,13 @@ export default function Home() {
     };
 
     resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
     animation = requestAnimationFrame(animate);
     window.addEventListener("resize", resize);
     return () => {
       cancelAnimationFrame(animation);
+      observer.disconnect();
       window.removeEventListener("resize", resize);
     };
   }, []);
